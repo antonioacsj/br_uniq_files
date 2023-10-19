@@ -44,7 +44,7 @@ func Work(idx_consumidor int, wg *sync.WaitGroup, produtor <-chan TchanStruc) {
 	*/
 	defer wg.Done()
 	for fileAProcessar := range produtor {
-		MesmoTamanho[fileAProcessar.idx_grupo].arquivos[fileAProcessar.idx_arquivo].hash = hashFile5Pulos(fileAProcessar.path)
+		MesmoTamanho[fileAProcessar.idx_grupo].arquivos[fileAProcessar.idx_arquivo].hash = hashFile5Pieces(fileAProcessar.path)
 		fmt.Printf(".")
 	}
 }
@@ -76,6 +76,10 @@ func main() {
 	}
 
 	dirAntigo := strings.TrimPrefix(strings.TrimSuffix(os.Args[1], "\\"), ".\\")
+	if dirAntigo == "." {
+		fmt.Printf("Can´t be tPath:'%s' don´t exists. It must be a directory.", dirAntigo)
+		return
+	}
 	info, err := os.Stat(dirAntigo)
 	if err != nil {
 		fmt.Printf("Path:'%s' don´t exists. It must be a directory.", dirAntigo)
@@ -99,11 +103,11 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	fmt.Printf("\n\n**Loading files... (step One):")
-	carregaArquivos()
+	loadFiles()
 	fmt.Printf("\n\n**(step One) finished!")
 
 	fmt.Printf("\n\n**Selecting uniques by size (step Two):")
-	selecionaTamanhosUnicos()
+	selectBySize()
 	fmt.Printf("\n\n**(step Two) finished!")
 
 	fmt.Printf("\n\n**Heavy work (step Three):")
@@ -122,6 +126,19 @@ func main() {
 	consumidor_wg.Wait()
 	fmt.Printf("\n\n**(step Three) finished!")
 
+	fmt.Printf("\n\n**Select by Hash (step Four):\n")
+	selectByHash()
+	fmt.Printf("\n\n**(step Four) finished!")
+
+	fmt.Printf("\n\n Total of Uniques: %d", len(GrupoFilesUnicosFinal))
+
+	fmt.Printf("\n\n**Moving Uniques (step Five):\n")
+	moveUniques(dirAntigo, dirNovo)
+	fmt.Printf("\n\n**(step Five) finished!")
+
+}
+
+func selectByHash() {
 	var arquivo_unico bool
 	fmt.Printf("\n\n**Selecting uniques by hash (step Four):")
 	for i := 0; i < len(MesmoTamanho); i++ {
@@ -142,16 +159,9 @@ func main() {
 			}
 		}
 	}
-	fmt.Printf("\n\n**(step Four) finished!")
-	fmt.Printf("\n\n Total of Uniques: %d", len(GrupoFilesUnicosFinal))
-
-	fmt.Printf("\n\n**Moving Uniques (step Five):\n")
-	processaResultado(dirAntigo, dirNovo)
-	fmt.Printf("\n\n**(step Five) finished!")
-
 }
 
-func processaResultado(dirAntigo, dirNovo string) {
+func moveUniques(dirAntigo, dirNovo string) {
 
 	for i := 0; i < len(GrupoFilesUnicosFinal); i++ {
 		f_antigo := GrupoFilesUnicosFinal[i].path
@@ -170,7 +180,7 @@ func processaResultado(dirAntigo, dirNovo string) {
 	}
 }
 
-func carregaArquivos() {
+func loadFiles() {
 	/* Gera MesmoTamanho, contendo grupos de arquivos do mesmo tamanho */
 
 	n_files := 0
@@ -179,7 +189,8 @@ func carregaArquivos() {
 		func(path string, info os.FileInfo, err error) error {
 			if info.Size() > 0 && !info.IsDir() {
 				n_files++
-				fmt.Printf("\n%s", path)
+				//fmt.Printf("\n%s", path)
+				fmt.Printf(".")
 				tfile.info = info
 				tfile.path = path
 				AddTArquivoTGrupo(tfile)
@@ -190,7 +201,7 @@ func carregaArquivos() {
 
 }
 
-func selecionaTamanhosUnicos() {
+func selectBySize() {
 
 	for i := 0; i < len(Todos); i++ {
 		fmt.Printf(".")
@@ -215,7 +226,6 @@ func AddTArquivoTGrupo(tfile TFile) {
 				return
 			}
 		}
-
 	}
 
 	if !achou {
@@ -227,7 +237,7 @@ func AddTArquivoTGrupo(tfile TFile) {
 
 }
 
-func hashFile5Pulos(arquivo string) string {
+func hashFile5Pieces(arquivo string) string {
 
 	f, err := os.Open(arquivo)
 	if err != nil {
@@ -241,7 +251,7 @@ func hashFile5Pulos(arquivo string) string {
 
 	blockSize := 1024 * 32 //32 Kb
 	if fi.Size() <= int64(blockSize*5) {
-		return hashFileCompleto(arquivo)
+		return hashFileFull(arquivo)
 	}
 
 	tamanho_pulo := fi.Size() / int64(5)
@@ -267,7 +277,7 @@ func hashFile5Pulos(arquivo string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-func hashFileCompleto(arquivo string) string {
+func hashFileFull(arquivo string) string {
 	f, err := os.Open(arquivo)
 	if err != nil {
 		log.Fatal(err)
